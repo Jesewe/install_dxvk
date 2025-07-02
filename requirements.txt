@@ -1,0 +1,4 @@
+orjson==3.10.18
+requests==2.32.4
+tqdm==4.67.1
+colorama==0.4.6
