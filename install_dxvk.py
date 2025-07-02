@@ -7,6 +7,7 @@ import pathlib
 from tqdm import tqdm
 from colorama import init, Fore, Style
 import orjson
+import argparse
 
 # Initialize colorama for cross-platform colored output
 init()
@@ -74,6 +75,30 @@ def prompt_dxvk_version():
             return 'd3d11', ['d3d11.dll', 'dxgi.dll']
         print(f"{Fore.RED}Invalid choice. Please enter a number between 1 and 4.{Style.RESET_ALL}")
 
+def validate_dxvk_version(version):
+    """Validate DXVK version from command-line argument."""
+    version_map = {
+        'd3d8': ('d3d8', ['d3d8.dll', 'd3d9.dll']),
+        'd3d9': ('d3d9', ['d3d9.dll']),
+        'd3d10': ('d3d10', ['d3d10core.dll', 'd3d11.dll', 'dxgi.dll']),
+        'd3d11': ('d3d11', ['d3d11.dll', 'dxgi.dll'])
+    }
+    if version.lower() not in version_map:
+        raise argparse.ArgumentTypeError("DXVK version must be one of: d3d8, d3d9, d3d10, d3d11")
+    return version_map[version.lower()]
+
+def validate_bitness(bitness):
+    """Validate bitness from command-line argument."""
+    if bitness.lower() not in ['x32', 'x64']:
+        raise argparse.ArgumentTypeError("Bitness must be either x32 or x64")
+    return bitness.lower()
+
+def validate_directory(directory):
+    """Validate game directory from command-line argument."""
+    if not os.path.isdir(directory):
+        raise argparse.ArgumentTypeError(f"Directory '{directory}' does not exist")
+    return pathlib.Path(directory)
+
 def check_existing_dxvk(target_dir, dlls, bitness, game_dir):
     """Check if DXVK DLLs already exist in the target directory."""
     existing_dlls = []
@@ -99,16 +124,19 @@ def check_existing_dxvk(target_dir, dlls, bitness, game_dir):
     return True
 
 def main():
+    parser = argparse.ArgumentParser(description="DXVK Installation Script")
+    parser.add_argument('--game-dir', type=validate_directory, help="Path to the game directory")
+    parser.add_argument('--bitness', type=validate_bitness, choices=['x32', 'x64'], help="Bitness (x32 or x64)")
+    parser.add_argument('--dxvk-version', type=validate_dxvk_version, help="DXVK version (d3d8, d3d9, d3d10, d3d11)")
+    
+    args = parser.parse_args()
+
     print(f"{Fore.BLUE}DXVK Installation Script{Style.RESET_ALL}")
     
-    # Prompt for game directory
-    game_dir = pathlib.Path(prompt_game_directory())
-    
-    # Prompt for bitness
-    bitness = prompt_bitness()
-    
-    # Prompt for DXVK version
-    dxvk_version, dlls = prompt_dxvk_version()
+    # Use command-line arguments if provided, otherwise prompt
+    game_dir = args.game_dir if args.game_dir else pathlib.Path(prompt_game_directory())
+    bitness = args.bitness if args.bitness else prompt_bitness()
+    dxvk_version, dlls = args.dxvk_version if args.dxvk_version else prompt_dxvk_version()
     
     # Determine target directory (game directory or system32 subdirectory)
     target_dir = game_dir / 'system32' if (game_dir / 'system32').exists() else game_dir
