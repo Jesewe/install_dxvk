@@ -35,9 +35,10 @@ def get_latest_dxvk_release():
     response = requests.get(api_url)
     response.raise_for_status()
     data = orjson.loads(response.content)
+    version = data['tag_name']
     for asset in data['assets']:
         if asset['name'].endswith('.tar.gz'):
-            return asset['browser_download_url'], asset['name']
+            return asset['browser_download_url'], asset['name'], version
     raise Exception("No .tar.gz release found")
 
 def prompt_game_directory():
@@ -99,28 +100,92 @@ def validate_directory(directory):
         raise argparse.ArgumentTypeError(f"Directory '{directory}' does not exist")
     return pathlib.Path(directory)
 
-def check_existing_dxvk(target_dir, dlls, bitness, game_dir):
-    """Check if DXVK DLLs already exist in the target directory."""
+def get_existing_dxvk_version(target_dir, game_dir, bitness):
+    """Infer existing DXVK version based on DLL files in the target directory."""
+    dll_sets = {
+        'd3d8': ['d3d8.dll', 'd3d9.dll'],
+        'd3d9': ['d3d9.dll'],
+        'd3d10': ['d3d10core.dll', 'd3d11.dll', 'dxgi.dll'],
+        'd3d11': ['d3d11.dll', 'dxgi.dll']
+    }
     existing_dlls = []
-    for dll in dlls:
+    existing_version = None
+
+    # Check DLLs in system32 or game directory
+    for dll in ['d3d8.dll', 'd3d9.dll', 'd3d10core.dll', 'd3d11.dll', 'dxgi.dll']:
         if (target_dir / dll).exists():
             existing_dlls.append(dll)
+
+    # Check syswow64 for x64 bitness
     if bitness == 'x64' and (game_dir / 'syswow64').exists():
         syswow64_dir = game_dir / 'syswow64'
-        for dll in dlls:
+        for dll in ['d3d8.dll', 'd3d9.dll', 'd3d10core.dll', 'd3d11.dll', 'dxgi.dll']:
             if (syswow64_dir / dll).exists():
                 existing_dlls.append(f"{dll} (syswow64)")
+
+    # Determine version based on DLLs
+    for version, dll_list in dll_sets.items():
+        if all((target_dir / dll).exists() for dll in dll_list if dll in existing_dlls) or \
+           (bitness == 'x64' and (game_dir / 'syswow64').exists() and \
+            all((game_dir / 'syswow64' / dll).exists() for dll in dll_list if dll in existing_dlls)):
+            existing_version = version
+            break
+
+    if existing_dlls and not existing_version:
+        existing_version = "unknown (DLLs detected)"
+
+    return existing_version, existing_dlls
+
+def check_existing_dxvk(target_dir, dlls, bitness, game_dir, latest_version, selected_dxvk_version):
+    """Check for existing DXVK DLLs and version, prompt for reinstall if different."""
+    existing_version, existing_dlls = get_existing_dxvk_version(target_dir, game_dir, bitness)
+    
     if existing_dlls:
-        print(f"{Fore.YELLOW}Existing DXVK DLLs found: {', '.join(existing_dlls)}{Style.RESET_ALL}")
-        while True:
-            choice = input(f"{Fore.GREEN}Do you want to reinstall DXVK? (yes/no): {Style.RESET_ALL}").strip().lower()
-            if choice in ['yes', 'y']:
-                return True
-            elif choice in ['no', 'n']:
-                print(f"{Fore.YELLOW}Installation cancelled by user.{Style.RESET_ALL}")
-                input(f"{Fore.GREEN}Press Enter to exit...{Style.RESET_ALL}")
-                exit(0)
-            print(f"{Fore.RED}Invalid input. Please enter 'yes' or 'no'.{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}Existing DXVK version ({existing_version}) found with DLLs: {', '.join(existing_dlls)}{Style.RESET_ALL}")
+        if existing_version != selected_dxvk_version:
+            print(f"{Fore.YELLOW}Selected DXVK version is {selected_dxvk_version} (latest: {latest_version}).{Style.RESET_ALL}")
+            while True:
+                choice = input(f"{Fore.GREEN}Do you want to remove the existing {existing_version} version and install {selected_dxvk_version} ({latest_version})? (yes/no): {Style.RESET_ALL}").strip().lower()
+                if choice in ['yes', 'y']:
+                    # Remove existing DLLs
+                    for dll in ['d3d8.dll', 'd3d9.dll', 'd3d10core.dll', 'd3d11.dll', 'dxgi.dll']:
+                        dll_path = target_dir / dll
+                        if dll_path.exists():
+                            os.remove(dll_path)
+                            print(f"{Fore.CYAN}Removed {dll_path}{Style.RESET_ALL}")
+                        if bitness == 'x64' and (game_dir / 'syswow64').exists():
+                            syswow64_dll = game_dir / 'syswow64' / dll
+                            if syswow64_dll.exists():
+                                os.remove(syswow64_dll)
+                                print(f"{Fore.CYAN}Removed {syswow64_dll}{Style.RESET_ALL}")
+                    return True
+                elif choice in ['no', 'n']:
+                    print(f"{Fore.YELLOW}Installation cancelled by user.{Style.RESET_ALL}")
+                    input(f"{Fore.GREEN}Press Enter to exit...{Style.RESET_ALL}")
+                    exit(0)
+                print(f"{Fore.RED}Invalid input. Please enter 'yes' or 'no'.{Style.RESET_ALL}")
+        else:
+            print(f"{Fore.YELLOW}Current DXVK version ({existing_version}) matches the selected version.{Style.RESET_ALL}")
+            while True:
+                choice = input(f"{Fore.GREEN}Do you want to reinstall DXVK {existing_version} ({latest_version})? (yes/no): {Style.RESET_ALL}").strip().lower()
+                if choice in ['yes', 'y']:
+                    # Remove existing DLLs
+                    for dll in ['d3d8.dll', 'd3d9.dll', 'd3d10core.dll', 'd3d11.dll', 'dxgi.dll']:
+                        dll_path = target_dir / dll
+                        if dll_path.exists():
+                            os.remove(dll_path)
+                            print(f"{Fore.CYAN}Removed {dll_path}{Style.RESET_ALL}")
+                        if bitness == 'x64' and (game_dir / 'syswow64').exists():
+                            syswow64_dll = game_dir / 'syswow64' / dll
+                            if syswow64_dll.exists():
+                                os.remove(syswow64_dll)
+                                print(f"{Fore.CYAN}Removed {syswow64_dll}{Style.RESET_ALL}")
+                    return True
+                elif choice in ['no', 'n']:
+                    print(f"{Fore.YELLOW}Installation cancelled by user.{Style.RESET_ALL}")
+                    input(f"{Fore.GREEN}Press Enter to exit...{Style.RESET_ALL}")
+                    exit(0)
+                print(f"{Fore.RED}Invalid input. Please enter 'yes' or 'no'.{Style.RESET_ALL}")
     return True
 
 def main():
@@ -142,17 +207,17 @@ def main():
     target_dir = game_dir / 'system32' if (game_dir / 'system32').exists() else game_dir
     target_dir.mkdir(parents=True, exist_ok=True)
     
-    # Check for existing DXVK DLLs
-    if not check_existing_dxvk(target_dir, dlls, bitness, game_dir):
-        return
-    
     # Fetch latest DXVK release
     try:
-        download_url, release_name = get_latest_dxvk_release()
-        print(f"{Fore.GREEN}Found release: {release_name}{Style.RESET_ALL}")
+        download_url, release_name, latest_version = get_latest_dxvk_release()
+        print(f"{Fore.GREEN}Found release: {release_name} (version {latest_version}){Style.RESET_ALL}")
     except Exception as e:
         print(f"{Fore.RED}Failed to fetch DXVK release: {e}{Style.RESET_ALL}")
         input(f"{Fore.GREEN}Press Enter to exit...{Style.RESET_ALL}")
+        return
+    
+    # Check for existing DXVK DLLs and version
+    if not check_existing_dxvk(target_dir, dlls, bitness, game_dir, latest_version, dxvk_version):
         return
     
     # Create temporary directory
@@ -214,6 +279,12 @@ def main():
                 dest_path = syswow64_dir / dll
                 shutil.copy(src_path, dest_path)
                 print(f"{Fore.CYAN}Copied {dll} to {dest_path}{Style.RESET_ALL}")
+        
+        # Copy dxvk.conf if it exists in the archive
+        dxvk_conf_src = os.path.join(dxvk_dir, 'dxvk.conf')
+        if os.path.isfile(dxvk_conf_src):
+            shutil.copy(dxvk_conf_src, target_dir / 'dxvk.conf')
+            print(f"{Fore.CYAN}Copied dxvk.conf to {target_dir / 'dxvk.conf'}{Style.RESET_ALL}")
         
         print(f"{Fore.GREEN}DXVK {dxvk_version} ({bitness}) installed successfully to {target_dir}.{Style.RESET_ALL}")
         print(f"{Fore.YELLOW}Please ensure the game is configured to use these DLLs (e.g., via winecfg for Wine or game settings for DXVK Native).{Style.RESET_ALL}")
