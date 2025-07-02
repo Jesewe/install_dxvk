@@ -1,0 +1,37 @@
+# UTF-8
+# This is a version file for the DXVK Installer executable
+
+VSVersionInfo(
+    ffi=FixedFileInfo(
+        filevers=(1, 0, 1, 0),
+        prodvers=(1, 0, 1, 0),
+        mask=0x3f,
+        flags=0x0,
+        OS=0x4,
+        fileType=0x1,
+        subtype=0x0,
+        date=(0, 0)
+    ),
+    kids=[
+        StringFileInfo(
+            [
+                StringTable(
+                    u'040904b0',
+                    [
+                        StringStruct(u'CompanyName', u'Jesewe'),
+                        StringStruct(u'FileDescription', u'DXVK Installer for automating DXVK installation in game directories'),
+                        StringStruct(u'FileVersion', u'1.0.1.0'),
+                        StringStruct(u'InternalName', u'DXVK-Installer'),
+                        StringStruct(u'LegalCopyright', u'© 2025 Jesewe. Licensed under MIT License'),
+                        StringStruct(u'OriginalFilename', u'DXVK-Installer.exe'),
+                        StringStruct(u'ProductName', u'DXVK Installer'),
+                        StringStruct(u'ProductVersion', u'1.0.1.0'),
+                        StringStruct(u'Comments', u'A CLI tool to install DXVK DLLs for Direct3D 8, 9, 10, and 11 in game directories for Wine or DXVK Native setups.'),
+                        StringStruct(u'LegalTrademarks', u'All trademarks are property of their respective owners.'),
+                    ]
+                )
+            ]
+        ),
+        VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
+    ]
+)
