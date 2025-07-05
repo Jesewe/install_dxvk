@@ -4,6 +4,7 @@ import tarfile
 import shutil
 import tempfile
 import pathlib
+import webbrowser
 from tqdm import tqdm
 from colorama import init, Fore, Style
 import orjson
@@ -11,11 +12,15 @@ import argparse
 from dxvk_utils import (
     prompt_game_directory, prompt_bitness, prompt_dxvk_version,
     detect_dxvk_version, validate_dxvk_version, validate_bitness,
-    validate_directory, validate_dxvk_release, get_existing_dxvk_version
+    validate_directory, validate_dxvk_release, get_existing_dxvk_version,
+    compare_versions
 )
 
 # Initialize colorama for cross-platform colored output
 init()
+
+# Current script version
+SCRIPT_VERSION = "v1.0.3"
 
 class DXVKInstaller:
     def __init__(self, game_dir, bitness, dxvk_version, dlls, dxvk_release=None):
@@ -25,6 +30,44 @@ class DXVKInstaller:
         self.dlls = dlls
         self.dxvk_release = dxvk_release
         self.target_dir = self.game_dir / 'system32' if (self.game_dir / 'system32').exists() else self.game_dir
+
+    def check_for_update(self):
+        """Check for a newer version of the script via GitHub API."""
+        print(f"{Fore.YELLOW}Checking for script updates...{Style.RESET_ALL}")
+        try:
+            api_url = "https://api.github.com/repos/Jesewe/install_dxvk/releases/latest"
+            response = requests.get(api_url)
+            response.raise_for_status()
+            data = orjson.loads(response.content)
+            latest_version = data['tag_name']
+            if compare_versions(SCRIPT_VERSION, latest_version) < 0:
+                print(f"{Fore.GREEN}A newer version ({latest_version}) is available!{Style.RESET_ALL}")
+                print(f"{Fore.GREEN}Release page: https://github.com/Jesewe/install_dxvk/releases/latest{Style.RESET_ALL}")
+                
+                choice = input(f"{Fore.GREEN}Would you like to open the release page in your browser? (yes/no): {Style.RESET_ALL}").strip().lower()
+                if choice in ['yes', 'y']:
+                    webbrowser.open("https://github.com/Jesewe/install_dxvk/releases/latest")
+                    print(f"{Fore.YELLOW}Opened release page in browser. Please update the script.{Style.RESET_ALL}")
+                elif choice in ['no', 'n']:
+                    print(f"{Fore.YELLOW}Continuing with current version ({SCRIPT_VERSION}).{Style.RESET_ALL}")
+                else:
+                    print(f"{Fore.RED}Invalid input. Please enter 'yes' or 'no'.{Style.RESET_ALL}")
+                
+                while True:
+                    choice = input(f"{Fore.GREEN}Continue with installation using current version ({SCRIPT_VERSION})? (yes/no): {Style.RESET_ALL}").strip().lower()
+                    if choice in ['yes', 'y']:
+                        return True
+                    elif choice in ['no', 'n']:
+                        print(f"{Fore.YELLOW}Installation cancelled. Please update the script.{Style.RESET_ALL}")
+                        input(f"{Fore.GREEN}Press Enter to exit...{Style.RESET_ALL}")
+                        exit(0)
+                    print(f"{Fore.RED}Invalid input. Please enter 'yes' or 'no'.{Style.RESET_ALL}")
+            else:
+                print(f"{Fore.GREEN}You are using the latest version ({SCRIPT_VERSION}).{Style.RESET_ALL}")
+                return True
+        except Exception as e:
+            print(f"{Fore.YELLOW}Failed to check for updates: {e}. Continuing with current version ({SCRIPT_VERSION}).{Style.RESET_ALL}")
+            return True
 
     def download_file(self, url, dest_path):
         """Download a file with a progress bar."""
@@ -199,11 +242,19 @@ def main():
     parser.add_argument('--bitness', type=validate_bitness, choices=['x32', 'x64'], help="Bitness (x32 or x64)")
     parser.add_argument('--dxvk-version', type=validate_dxvk_version, help="DXVK version (d3d8, d3d9, d3d10, d3d11)")
     parser.add_argument('--dxvk-release', type=validate_dxvk_release, help="Specific DXVK release version (e.g., v2.3 or v2.3.1)")
+    parser.add_argument('--check-update', action='store_true', help="Check for script updates")
+    parser.add_argument('--no-update-check', action='store_true', help="Skip checking for script updates")
     
     args = parser.parse_args()
 
-    print(f"{Fore.YELLOW}Welcome to the DXVK Installation Script!{Style.RESET_ALL}")
-    print(f"{Fore.YELLOW}This script will help you install DXVK for your game.{Style.RESET_ALL}")
+    # Check for updates if requested or in interactive mode without --no-update-check
+    if args.check_update or (not args.no_update_check and not all([args.game_dir, args.bitness, args.dxvk_version])):
+        installer = DXVKInstaller(pathlib.Path('.'), 'x64', 'd3d11', ['d3d11.dll', 'dxgi.dll'])  # Dummy instance for update check
+        if not installer.check_for_update():
+            return
+
+    print(f"{Fore.YELLOW}\nWelcome to the DXVK Installation Script!{Style.RESET_ALL}")
+    print(f"{Fore.YELLOW}\nThis script will help you install DXVK for your game.{Style.RESET_ALL}")
     
     # Use command-line arguments if provided, otherwise prompt
     game_dir = args.game_dir if args.game_dir else pathlib.Path(prompt_game_directory())

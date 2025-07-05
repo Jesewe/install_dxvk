@@ -5,6 +5,28 @@ import glob
 import pefile
 from colorama import Fore, Style
 
+def compare_versions(current_version, latest_version):
+    """Compare two version strings (e.g., 'v1.0.0' vs 'v1.0.1'). Returns -1 if current < latest, 0 if equal, 1 if current > latest."""
+    def parse_version(version):
+        # Remove 'v' prefix and split into components
+        version = version.lstrip('v')
+        return [int(x) for x in version.split('.')]
+    
+    current = parse_version(current_version)
+    latest = parse_version(latest_version)
+    
+    # Pad shorter version with zeros
+    max_len = max(len(current), len(latest))
+    current.extend([0] * (max_len - len(current)))
+    latest.extend([0] * (max_len - len(latest)))
+    
+    for i in range(max_len):
+        if current[i] < latest[i]:
+            return -1
+        elif current[i] > latest[i]:
+            return 1
+    return 0
+
 def prompt_game_directory():
     """Prompt the user for the game directory and validate it."""
     while True:
