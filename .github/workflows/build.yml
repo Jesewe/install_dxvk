@@ -36,7 +36,7 @@ jobs:
 
       - name: Package Application
         run: |
-          pyinstaller --noconfirm --onefile --console --icon "src\img\icon.ico" --version-file "version.txt" --name "DXVK-Installer" --add-data "src/img/*;src/img" --add-data "src/*;src" "install_dxvk.py"
+          pyinstaller --noconfirm --onefile --console --icon "src\img\icon.ico" --version-file "version.txt" --name "DXVK-Installer" --add-data "src/img/*;src/img" --add-data "src/*;src" --add-data "dxvk_utils.py;." "install_dxvk.py"
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
