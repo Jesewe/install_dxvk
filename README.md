@@ -15,14 +15,13 @@ This Python CLI script automates the installation of [DXVK](https://github.com/d
 
 1. **Clone or Download the Script**:
 
-   - Clone this repository or download the `install_dxvk.py` and `requirements.txt` files.
+   - Clone this repository or download the `install_dxvk.py`, `dxvk_utils.py`, and `requirements.txt` files.
 
 2. **Install Dependencies**:
 
-   - Install the required Python libraries:
-     ```bash
-     pip install -r requirements.txt
-     ```
+   ```bash
+   pip install -r requirements.txt
+   ```
 
 3. **Run the Script**:
 
@@ -41,31 +40,40 @@ This Python CLI script automates the installation of [DXVK](https://github.com/d
 
    - **Command-Line Mode**:
      Run the script with arguments to skip prompts:
+
      ```bash
      python install_dxvk.py --game-dir /path/to/game --bitness x64 --dxvk-version d3d11 --dxvk-release v2.3
      ```
+
      Available arguments:
-     - `--game-dir`: Path to the game directory (e.g., `/home/user/games/MyGame`).
-     - `--bitness`: Game architecture (`x32` or `x64`).
-     - `--dxvk-version`: DXVK version (`d3d8`, `d3d9`, `d3d10`, or `d3d11`). If omitted, the script attempts to auto-detect the version.
-     - `--dxvk-release`: Specific DXVK release version (e.g., `v2.3`). If omitted, the latest release is used.
+
+     | Argument | Description |
+     |---|---|
+     | `--game-dir` | Path to the game directory (e.g., `/home/user/games/MyGame`). |
+     | `--bitness` | Game architecture: `x32` or `x64`. |
+     | `--dxvk-version` | DXVK version: `d3d8`, `d3d9`, `d3d10`, or `d3d11`. If omitted, auto-detection is attempted. |
+     | `--dxvk-release` | Specific DXVK release version (e.g., `v2.3`). If omitted, the latest release is used. |
+     | `--check-update` | Explicitly check for a newer version of the script. |
+     | `--no-update-check` | Skip the update check entirely (useful for automated/CI environments). |
 
 4. **Post-Installation**:
    - For **Wine**: Use `winecfg` to add native DLL overrides for the installed DLLs (e.g., `d3d9`, `d3d11`, `dxgi`).
    - For **DXVK Native**: Ensure the game loads DLLs from the installed location and set the `DXVK_WSI_DRIVER` environment variable (e.g., `export DXVK_WSI_DRIVER=SDL2`).
    - Verify DXVK usage by setting:
+
      ```bash
      export DXVK_HUD=1
      ```
+
      Then run the game to check if DXVK is active.
 
 ## Features
 
 - **Flexible Input**: Supports both interactive prompts and command-line arguments for game directory, bitness, DXVK version, and specific release version.
 - **Specific Version Installation**: Allows installation of a specific DXVK release (e.g., `v2.2`) using the `--dxvk-release` argument.
-- **Auto-Detection of DXVK Version**: Automatically detects the required DXVK version (D3D8, D3D9, D3D10, or D3D11) by analyzing `.exe` files in the game directory using the `pefile` library.
-- **Existing Version Detection**: Checks for existing DXVK installations by examining DLLs (`d3d8.dll`, `d3d9.dll`, `d3d10core.dll`, `d3d11.dll`, `dxgi.dll`) and prompts to overwrite if a different version is detected.
-- **Automated Download**: Fetches the specified or latest DXVK release from [GitHub](https://github.com/doitsujin/dxvk/releases).
+- **Auto-Detection of DXVK Version**: Automatically detects the required DXVK version by analyzing `.exe` files in the game directory using the `pefile` library. Detection uses numeric version priority to correctly resolve cases where a game imports DLLs from multiple Direct3D generations (e.g., a game importing both `d3d9.dll` and `d3d10core.dll` is correctly identified as D3D10).
+- **Existing Version Detection**: Checks for existing DXVK installations by examining DLLs and prompts to overwrite if a different version is detected.
+- **Automated Download**: Fetches the specified or latest DXVK release from [GitHub](https://github.com/doitsujin/dxvk/releases) with a configurable connection timeout.
 - **User-Friendly CLI**: Provides clear, colored output using `colorama` for interactive prompts and error messages.
 - **Progress Bar**: Displays a download progress bar using `tqdm`.
 - **Flexible Installation**: Copies DLLs to the game directory's `system32` (and `syswow64` for x64 if it exists) or directly to the game directory if no subdirectories are found.
@@ -76,10 +84,10 @@ This Python CLI script automates the installation of [DXVK](https://github.com/d
 ## Troubleshooting
 
 - **No .exe files found**: If auto-detection fails because no `.exe` files are found, the script will prompt for manual DXVK version selection. Ensure the game directory contains the game's executable.
-- **Invalid DXVK release**: If the specified `--dxvk-release` (e.g., `v2.3`) is not found on GitHub, check the available releases at [DXVK Releases](https://github.com/doitsujin/dxvk/releases).
+- **Invalid DXVK release**: If the specified `--dxvk-release` (e.g., `v2.3`) is not found on GitHub, check the available releases at [DXVK Releases](https://github.com/doitsujin/dxvk/releases). The release format must be `vX.Y` or `vX.Y.Z`.
 - **Failed to analyze .exe files**: Ensure `pefile` is installed (`pip install pefile`) and that the `.exe` files are accessible and not corrupted.
 - **DLLs not loaded by game**: Verify DLL overrides in `winecfg` for Wine or check the game's DLL loading path for DXVK Native.
-- **Network errors**: Ensure a stable internet connection when downloading DXVK releases.
+- **Network errors / timeouts**: The script enforces a 5-second connection timeout and a 30-second read timeout. Ensure a stable internet connection when downloading DXVK releases.
 
 ## License
 
