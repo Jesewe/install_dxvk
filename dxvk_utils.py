@@ -3,8 +3,13 @@ import re
 import pathlib
 import argparse
 import glob
+import webbrowser
+import orjson
 import pefile
 from colorama import Fore, Style
+
+# Default network timeout (connect timeout, read timeout) in seconds
+DEFAULT_HTTP_TIMEOUT = (5, 30)
 
 # Single source of truth for the DXVK version required DLLs mapping.
 DXVK_VERSION_MAP = {
@@ -13,6 +18,11 @@ DXVK_VERSION_MAP = {
     'd3d10': ['d3d10core.dll', 'd3d11.dll', 'dxgi.dll'],
     'd3d11': ['d3d11.dll', 'dxgi.dll'],
 }
+
+# Unique set of all managed DXVK DLLs preserving declaration order
+ALL_DXVK_DLLS = tuple(dict.fromkeys(
+    dll for dlls in DXVK_VERSION_MAP.values() for dll in dlls
+))
 
 # Detection order for get_existing_dxvk_version: check DLL supersets before subsets
 # so that d3d8 (which includes d3d9.dll) is matched before d3d9, and d3d10
@@ -30,6 +40,16 @@ _DLL_TO_VERSION = {
     'd3d11.dll':    'd3d11',
     'dxgi.dll':     'd3d11',  # shared by d3d10 and d3d11; priority resolves ties
 }
+
+def prompt_yes_no(message):
+    """Prompt the user with a yes/no question and return a boolean."""
+    while True:
+        choice = input(f"{Fore.GREEN}{message} (yes/no): {Style.RESET_ALL}").strip().lower()
+        if choice in ('yes', 'y'):
+            return True
+        if choice in ('no', 'n'):
+            return False
+        print(f"{Fore.RED}Invalid input. Please enter 'yes' or 'no'.{Style.RESET_ALL}")
 
 def compare_versions(current_version, latest_version):
     """Compare two version strings (e.g. 'v1.0.0' vs 'v1.0.1').
@@ -70,15 +90,8 @@ def prompt_bitness():
 
 def prompt_dxvk_version():
     """Prompt the user for the DXVK version (D3D8, D3D9, D3D10, D3D11)."""
-    # Build the menu from DXVK_VERSION_MAP so adding a new version only
-    # requires updating the map.
-    options = list(reversed(list(DXVK_VERSION_MAP.items())))  # display d3d8 first
-    options = [
-        ('d3d8',  DXVK_VERSION_MAP['d3d8']),
-        ('d3d9',  DXVK_VERSION_MAP['d3d9']),
-        ('d3d10', DXVK_VERSION_MAP['d3d10']),
-        ('d3d11', DXVK_VERSION_MAP['d3d11']),
-    ]
+    # Build interactive menu directly from DXVK_VERSION_MAP so version additions require editing only the map
+    options = list(DXVK_VERSION_MAP.items())
 
     while True:
         print(f"\n{Fore.YELLOW}Available DXVK versions:{Style.RESET_ALL}")
@@ -101,6 +114,7 @@ def detect_dxvk_version(game_dir):
     detected_dlls = set()
 
     for exe in exe_files:
+        pe = None
         try:
             pe = pefile.PE(exe, fast_load=True)
             pe.parse_data_directories(
@@ -114,9 +128,11 @@ def detect_dxvk_version(game_dir):
                         priority = VERSION_PRIORITY[_DLL_TO_VERSION[dll_name]]
                         if priority > best_priority:
                             best_priority = priority
-            pe.close()
         except Exception as e:
             print(f"{Fore.YELLOW}Failed to analyze {exe}: {e}{Style.RESET_ALL}")
+        finally:
+            if pe is not None:
+                pe.close()
 
         if best_priority == VERSION_PRIORITY['d3d11']:
             break
@@ -136,7 +152,7 @@ def detect_dxvk_version(game_dir):
 
 def validate_dxvk_version(version):
     """Validate DXVK version from a command-line argument."""
-    # Single reference to DXVK_VERSION_MAP.
+    # Case-insensitive key validation against registered version targets
     key = version.lower()
     if key not in DXVK_VERSION_MAP:
         raise argparse.ArgumentTypeError(
@@ -168,17 +184,14 @@ def validate_dxvk_release(release):
 
 def get_existing_dxvk_version(target_dir, game_dir, bitness):
     """Infer existing DXVK version based on DLL files in the target directory."""
-    all_dlls = [dll for dlls in DXVK_VERSION_MAP.values() for dll in dlls]
-    all_dlls = list(dict.fromkeys(all_dlls))  # deduplicate, preserve order
-
     existing_dlls = []
-    for dll in all_dlls:
+    for dll in ALL_DXVK_DLLS:
         if (target_dir / dll).exists():
             existing_dlls.append(dll)
 
     if bitness == 'x64' and (game_dir / 'syswow64').exists():
         syswow64_dir = game_dir / 'syswow64'
-        for dll in all_dlls:
+        for dll in ALL_DXVK_DLLS:
             if (syswow64_dir / dll).exists():
                 existing_dlls.append(f"{dll} (syswow64)")
 
@@ -217,9 +230,8 @@ def check_for_update(session, script_version):
     print(f"{Fore.YELLOW}Checking for script updates...{Style.RESET_ALL}")
     try:
         api_url = "https://api.github.com/repos/Jesewe/install_dxvk/releases/latest"
-        response = session.get(api_url)
+        response = session.get(api_url, timeout=DEFAULT_HTTP_TIMEOUT)
         response.raise_for_status()
-        import orjson
         data = orjson.loads(response.content)
         latest_version = data['tag_name']
 
@@ -229,15 +241,14 @@ def check_for_update(session, script_version):
                 f"{Fore.GREEN}Release page: "
                 f"https://github.com/Jesewe/install_dxvk/releases/latest{Style.RESET_ALL}"
             )
-            open_browser = _prompt_yes_no("Would you like to open the release page in your browser?")
+            open_browser = prompt_yes_no("Would you like to open the release page in your browser?")
             if open_browser:
-                import webbrowser
                 webbrowser.open("https://github.com/Jesewe/install_dxvk/releases/latest")
                 print(f"{Fore.YELLOW}Opened release page in browser. Please update the script.{Style.RESET_ALL}")
             else:
                 print(f"{Fore.YELLOW}Continuing with current version ({script_version}).{Style.RESET_ALL}")
 
-            if not _prompt_yes_no(f"Continue with installation using current version ({script_version})?"):
+            if not prompt_yes_no(f"Continue with installation using current version ({script_version})?"):
                 print(f"{Fore.YELLOW}Installation cancelled. Please update the script.{Style.RESET_ALL}")
                 return False
         else:
@@ -248,14 +259,3 @@ def check_for_update(session, script_version):
             f"Continuing with current version ({script_version}).{Style.RESET_ALL}"
         )
     return True
-
-
-def _prompt_yes_no(message):
-    """Shared yes/no prompt used by module-level helpers."""
-    while True:
-        choice = input(f"{Fore.GREEN}{message} (yes/no): {Style.RESET_ALL}").strip().lower()
-        if choice in ('yes', 'y'):
-            return True
-        if choice in ('no', 'n'):
-            return False
-        print(f"{Fore.RED}Invalid input. Please enter 'yes' or 'no'.{Style.RESET_ALL}")
