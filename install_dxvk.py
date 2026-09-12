@@ -21,7 +21,7 @@ from dxvk_utils import (
 init()
 
 # Local version tag used for GitHub release comparisons and User-Agent headers
-SCRIPT_VERSION = "v1.0.5"
+SCRIPT_VERSION = "v1.0.6"
 
 class InstallationCancelled(Exception):
     """Raised when the user declines to proceed with installation or overwrite."""
