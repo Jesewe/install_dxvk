@@ -55,6 +55,7 @@ This Python CLI script automates the installation of [DXVK](https://github.com/d
      | `--dxvk-release` | Specific DXVK release version (e.g., `v2.3`). If omitted, the latest release is used. |
      | `--check-update` | Explicitly check for a newer version of the script. |
      | `--no-update-check` | Skip the update check entirely (useful for automated/CI environments). |
+     | `--yes`, `-y` | Automatically overwrite existing DLLs without interactive confirmation prompts. |
 
 4. **Post-Installation**:
    - For **Wine**: Use `winecfg` to add native DLL overrides for the installed DLLs (e.g., `d3d9`, `d3d11`, `dxgi`).
